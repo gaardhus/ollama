@@ -159,10 +159,15 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 		fmt.Fprintln(os.Stderr, "")
 	}
 
+	placeholder := "Send a message (/? for help)"
+	if opts.MultiModal {
+		placeholder = "Send a message with images (/? for help)"
+	}
+
 	scanner, err := readline.New(readline.Prompt{
 		Prompt:         ">>> ",
 		AltPrompt:      "... ",
-		Placeholder:    "Send a message (/? for help)",
+		Placeholder:    placeholder,
 		AltPlaceholder: `Use """ to end multi-line input`,
 	})
 	if err != nil {
@@ -207,6 +212,7 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 			switch multiline {
 			case MultilineSystem:
 				opts.System = sb.String()
+				opts.Messages = append(opts.Messages, api.Message{Role: "system", Content: opts.System})
 				fmt.Println("Set system message.")
 				sb.Reset()
 			case MultilineTemplate:
@@ -349,10 +355,13 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 
 					if args[1] == "system" {
 						opts.System = sb.String()
+						opts.Messages = append(opts.Messages, api.Message{Role: "system", Content: opts.System})
 						fmt.Println("Set system message.")
+						sb.Reset()
 					} else if args[1] == "template" {
 						opts.Template = sb.String()
 						fmt.Println("Set prompt template.")
+						sb.Reset()
 					}
 
 					sb.Reset()
@@ -488,28 +497,9 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 					return err
 				}
 				newMessage.Content = msg
-
-				// reset the context if we find another image
-				if len(images) > 0 {
-					newMessage.Images = append(newMessage.Images, images...)
-					// reset the context for the new image
-					opts.Messages = []api.Message{}
-				} else {
-					if len(opts.Messages) > 1 {
-						newMessage.Images = append(newMessage.Images, opts.Messages[len(opts.Messages)-2].Images...)
-					}
-				}
-				if len(newMessage.Images) == 0 {
-					fmt.Println("This model requires you to add a jpeg, png, or svg image.")
-					fmt.Println()
-					sb.Reset()
-					continue
-				}
+				newMessage.Images = images
 			}
 
-			if opts.System != "" {
-				opts.Messages = append(opts.Messages, api.Message{Role: "system", Content: opts.System})
-			}
 			opts.Messages = append(opts.Messages, newMessage)
 
 			assistant, err := chat(cmd, opts)
